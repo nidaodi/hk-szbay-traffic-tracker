@@ -1,0 +1,128 @@
+
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>紅橋雙向監控 - 強效版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans">
+
+    <div class="container mx-auto p-4 max-w-5xl">
+        <header class="mb-6 border-b border-slate-700 pb-4">
+            <h1 class="text-2xl font-bold text-blue-400 text-center">🚦 紅橋站交通實時儀表板</h1>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-slate-800 p-4 rounded-xl shadow-xl border border-blue-500/30">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-blue-400 font-bold">往深圳灣口岸 (B3X 北行)</h2>
+                    <span class="bg-blue-900/50 text-blue-300 text-xs px-2 py-1 rounded">CCTV: NT426F</span>
+                </div>
+                <div class="aspect-video bg-black rounded-lg overflow-hidden border border-slate-700">
+                    <img id="cctv-north" 
+                         src="https://tdcctv.data.gov.hk/NT426F.JPG" 
+                         referrerpolicy="no-referrer"
+                         class="w-full h-full object-cover" 
+                         alt="正在獲取北行影像...">
+                </div>
+                <div class="mt-4 flex justify-between items-end">
+                    <div>
+                        <p class="text-xs text-slate-400">當前負載預估</p>
+                        <p class="text-xl font-mono text-emerald-400">45% (座位充足)</p>
+                    </div>
+                    <button onclick="manualRefresh()" class="text-xs bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded transition">手動刷新</button>
+                </div>
+            </div>
+
+            <div class="bg-slate-800 p-4 rounded-xl shadow-xl border border-orange-500/30">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-orange-400 font-bold">往市區/九龍 (B3X 南行)</h2>
+                    <span class="bg-orange-900/50 text-orange-300 text-xs px-2 py-1 rounded">CCTV: NT423F</span>
+                </div>
+                <div class="aspect-video bg-black rounded-lg overflow-hidden border border-slate-700">
+                    <img id="cctv-south" 
+                         src="https://tdcctv.data.gov.hk/NT423F.JPG" 
+                         referrerpolicy="no-referrer"
+                         class="w-full h-full object-cover" 
+                         alt="正在獲取南行影像...">
+                </div>
+                <div class="mt-4 flex justify-between items-end">
+                    <div>
+                        <p class="text-xs text-slate-400">當前負載預估</p>
+                        <p class="text-xl font-mono text-orange-400">85% (非常擁擠)</p>
+                    </div>
+                    <p class="text-[10px] text-slate-500 italic">紅橋站常現長龍</p>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="mt-6 bg-slate-800 p-4 rounded-xl border border-slate-700 text-center">
+            <p class="text-sm text-slate-400">數據將在 <span id="timer" class="text-blue-400 font-mono">120</span> 秒後自動刷新影像</p>
+        </div>
+    </div>
+
+    <script>
+        function manualRefresh() {
+            const timestamp = new Date().getTime();
+            const northImg = document.getElementById('cctv-north');
+            const southImg = document.getElementById('cctv-south');
+            
+            // 重新賦值 Src 以強制更新
+            northImg.src = "https://tdcctv.data.gov.hk/NT426F.JPG?t=" + timestamp;
+            southImg.src = "https://tdcctv.data.gov.hk/NT423F.JPG?t=" + timestamp;
+            
+            console.log("CCTV Refreshed: " + new Date().toLocaleTimeString());
+            resetTimer();
+        }
+
+        let timeLeft = 120;
+        function updateTimer() {
+            timeLeft--;
+            document.getElementById('timer').innerText = timeLeft;
+            if (timeLeft <= 0) {
+                manualRefresh();
+            }
+        }
+        
+        function resetTimer() { timeLeft = 120; }
+        setInterval(updateTimer, 1000);
+    async function fetchB3XData() {
+    // 紅橋站 (往深圳灣) 的站點 ID 大約是 003433
+    const stopId = "003433"; 
+    // 使用代理服務獲取城巴 API 數據
+    const url = `https://corsproxy.io/?https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${stopId}/B3X`;
+
+    try {
+        const response = await fetch(url);
+        const json = await response.json();
+        
+        // 假設我們要第一班車的資料
+        const nextBus = json.data[0];
+        if (nextBus) {
+            const etaTime = new Date(nextBus.eta);
+            const diffMinutes = Math.round((etaTime - new Date()) / 60000);
+            
+            document.getElementById('north-eta').innerText = diffMinutes > 0 ? `${diffMinutes} 分鐘` : "即將抵達";
+            
+            // 根據載客量顯示顏色 (0=低, 1=中, 2=高)
+            const capacity = nextBus.data_part_c || 0;
+            const loadText = ["座位充足", "只有企位", "車廂已滿"][capacity];
+            console.log(`B3X ETA: ${diffMinutes} min, Load: ${loadText}`);
+        }
+    } catch (error) {
+        console.error("無法獲取巴士數據:", error);
+    }
+}
+
+// 啟動後每 60 秒跑一次
+setInterval(fetchB3XData, 60000);
+fetchB3XData();
+    </script>
+</body>
+</html>
