@@ -5,69 +5,111 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
-    <title>深港跨境 ↔ 紅橋雙向監控</title>
+    <title>紅橋交通監控 - 旗艦版</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans">
     <div class="container mx-auto p-4 max-w-5xl">
         <header class="mb-6 text-center border-b border-slate-700 pb-4">
-            <h1 class="text-2xl font-bold text-blue-400">🚦 深圳灣/紅橋 實時監控儀表板</h1>
-            <p class="text-xs text-slate-500 mt-2">CCTV 每 2 分鐘刷新 | 巴士數據每 1 分鐘更新</p>
+            <h1 class="text-2xl font-bold text-blue-400">🚦 深圳灣/紅橋 實時儀表板</h1>
+            <p class="text-[10px] text-slate-500 mt-1">數據每 30 秒自動同步</p>
         </header>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-slate-800 p-4 rounded-xl shadow-xl border border-blue-500/30">
-                <h2 class="text-blue-400 font-bold mb-3 flex justify-between">
-                    <span>往深圳灣口岸 (B3X 北行)</span>
-                    <span id="eta-north" class="text-emerald-400 font-mono">載入中...</span>
-                </h2>
-                <div class="aspect-video bg-black rounded-lg overflow-hidden mb-3">
+            <div class="bg-slate-800 p-5 rounded-2xl shadow-2xl border border-blue-500/20">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-blue-400 font-bold">往深圳灣口岸 (B3X)</h2>
+                        <p class="text-[10px] text-slate-400">站點：紅橋 (Northbound)</p>
+                    </div>
+                    <div class="text-right">
+                        <div id="eta-north" class="text-3xl font-mono text-emerald-400 font-bold">--</div>
+                        <div id="load-north" class="text-[10px] text-slate-400 mt-1">載入中...</div>
+                    </div>
+                </div>
+                <div class="aspect-video bg-black rounded-xl overflow-hidden border border-slate-700">
                     <img id="cctv-north" src="https://tdcctv.data.gov.hk/NT426F.JPG" referrerpolicy="no-referrer" class="w-full h-full object-cover">
                 </div>
-                <p class="text-[10px] text-slate-500 italic">CCTV 位置：紅橋站往口岸方向</p>
             </div>
 
-            <div class="bg-slate-800 p-4 rounded-xl shadow-xl border border-orange-500/30">
-                <h2 class="text-orange-400 font-bold mb-3 flex justify-between">
-                    <span>往屯門/九龍 (B3X 南行)</span>
-                    <span id="eta-south" class="text-emerald-400 font-mono">載入中...</span>
-                </h2>
-                <div class="aspect-video bg-black rounded-lg overflow-hidden mb-3">
+            <div class="bg-slate-800 p-5 rounded-2xl shadow-2xl border border-orange-500/20">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-orange-400 font-bold">往屯門/九龍 (B3X)</h2>
+                        <p class="text-[10px] text-slate-400">站點：紅橋 (Southbound)</p>
+                    </div>
+                    <div class="text-right">
+                        <div id="eta-south" class="text-3xl font-mono text-emerald-400 font-bold">--</div>
+                        <div id="load-south" class="text-[10px] text-slate-400 mt-1">載入中...</div>
+                    </div>
+                </div>
+                <div class="aspect-video bg-black rounded-xl overflow-hidden border border-slate-700">
                     <img id="cctv-south" src="https://tdcctv.data.gov.hk/NT423F.JPG" referrerpolicy="no-referrer" class="w-full h-full object-cover">
                 </div>
-                <p class="text-[10px] text-slate-500 italic">CCTV 位置：屯門公路近新墟 (往九龍方向)</p>
             </div>
+        </div>
+
+        <div class="mt-8 text-center">
+            <button onclick="updateAll()" class="bg-slate-700 hover:bg-blue-600 text-white px-8 py-3 rounded-full text-sm transition-all shadow-lg">
+                手動重新載入所有數據
+            </button>
         </div>
     </div>
 
     <script>
-        async function fetchETA(stopId, elementId) {
-            const proxy = "https://corsproxy.io/?";
-            const url = `${proxy}https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${stopId}/B3X`;
+        const CROWD_LEVELS = {
+            "0": { text: "座位充足", color: "text-emerald-400" },
+            "1": { text: "只有企位", color: "text-yellow-400" },
+            "2": { text: "車廂已滿", color: "text-red-400" }
+        };
+
+        async function fetchBus(stopId, etaId, loadId) {
+            const api = `https://rt.data.gov.hk/v2/transport/citybus/eta/CTB/${stopId}/B3X`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(api)}`;
+
             try {
-                const response = await fetch(url);
-                const json = await response.json();
-                if (json.data && json.data.length > 0) {
-                    const nextBus = json.data[0];
-                    const diff = Math.round((new Date(nextBus.eta) - new Date()) / 60000);
-                    const load = ["(位足)", "(有企位)", "(滿載)"][nextBus.data_part_c] || "";
-                    document.getElementById(elementId).innerText = (diff <= 0 ? "即將抵達" : diff + " 分鐘") + " " + load;
+                const response = await fetch(proxyUrl);
+                const result = await response.json();
+                const data = JSON.parse(result.contents).data;
+
+                if (data && data.length > 0) {
+                    const bus = data[0];
+                    // 計算時間
+                    const diff = Math.round((new Date(bus.eta) - new Date()) / 60000);
+                    document.getElementById(etaId).innerText = diff <= 0 ? "即到" : diff + "m";
+                    
+                    // 擁擠度邏輯
+                    const crowd = bus.data_part_c;
+                    const loadEl = document.getElementById(loadId);
+                    if (crowd !== undefined && CROWD_LEVELS[crowd]) {
+                        loadEl.innerText = CROWD_LEVELS[crowd].text;
+                        loadEl.className = `text-[10px] mt-1 font-bold ${CROWD_LEVELS[crowd].color}`;
+                    } else {
+                        loadEl.innerText = "暫無擁擠數據";
+                        loadEl.className = "text-[10px] mt-1 text-slate-500";
+                    }
                 }
-            } catch (e) { document.getElementById(elementId).innerText = "數據延遲"; }
+            } catch (err) {
+                document.getElementById(etaId).innerText = "ERR";
+                document.getElementById(loadId).innerText = "網絡超時";
+            }
         }
 
         function refreshCCTV() {
-            const t = new Date().getTime();
+            const t = Date.now();
             document.getElementById('cctv-north').src = "https://tdcctv.data.gov.hk/NT426F.JPG?t=" + t;
             document.getElementById('cctv-south').src = "https://tdcctv.data.gov.hk/NT423F.JPG?t=" + t;
         }
 
-        // 定時刷新：巴士數據 60秒，CCTV 120秒
-        setInterval(() => { fetchETA("003433", "eta-north"); fetchETA("001530", "eta-south"); }, 60000);
-        setInterval(refreshCCTV, 120000);
-        
-        // 初始執行
-        fetchETA("003433", "eta-north"); fetchETA("001530", "eta-south");
+        function updateAll() {
+            fetchBus("003433", "eta-north", "load-north"); // 紅橋往口岸
+            fetchBus("001530", "eta-south", "load-south"); // 紅橋往市區
+            refreshCCTV();
+        }
+
+        // 每 30 秒更新巴士，每 60 秒更新 CCTV
+        setInterval(() => { fetchBus("003433", "eta-north", "load-north"); fetchBus("001530", "eta-south", "load-south"); }, 30000);
+        setInterval(refreshCCTV, 60000);
+        updateAll();
     </script>
 </body>
-</html>
